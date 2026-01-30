@@ -16,6 +16,11 @@ from core.searcher import Searcher
 from core.processor import Processor
 from core.automation import AutomationManager
 
+# Import Enhanced Modules
+from core.enhanced.keyword_expander import KeywordExpander
+from core.enhanced.async_searcher import AsyncSearcher
+from core.enhanced.enhanced_processor import EnhancedProcessor
+
 # ==============================================================================
 # 1. INITIALIZATION & UI STYLING
 # ==============================================================================
@@ -187,6 +192,42 @@ def list_history_files():
 # 3. DASHBOARD COMPONENTS
 # ==============================================================================
 
+async def run_enhanced_task(module_idx, keyword, output_file):
+    """Execute task using the new Enhanced engine (Async + AI Batching)."""
+    expander = KeywordExpander()
+    searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
+    processor = EnhancedProcessor()
+    
+    st.info("🔍 Expanding keywords for maximum coverage...")
+    module_id = str(module_idx + 1)
+    # Expand for major regions
+    expanded_queries = expander.expand(keyword, module_id)
+    # Limit for performance mode demo (can be increased)
+    target_queries = expanded_queries[:5] 
+    
+    st.info(f"🚀 Launching Parallel Search for {len(target_queries)} queries...")
+    raw_results = await searcher.search_batch(target_queries, pages_per_query=2)
+    
+    if not raw_results:
+        st.warning("No results found in enhanced mode.")
+        return False
+        
+    st.info(f"🧠 AI Processing {len(raw_results)} results in batches...")
+    all_leads = processor.process_batch_enhanced(raw_results, batch_size=10)
+    
+    if all_leads:
+        # Save results
+        from core.deduplicator import Deduplicator
+        dedup = Deduplicator()
+        unique_leads = dedup.deduplicate(all_leads)
+        
+        # Save to CSV using the existing logic
+        df = pd.DataFrame(unique_leads)
+        df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        st.success(f"✨ Enhanced Task Complete! Found {len(unique_leads)} unique leads.")
+        return True
+    return False
+
 def show_api_status_dashboard():
     with st.sidebar:
         st.markdown("### 📊 System Dashboard")
@@ -319,6 +360,10 @@ with tab_run:
         
         keyword = st.text_input("Target Keyword", placeholder="e.g. furniture, electronics")
         
+        st.markdown("---")
+        st.markdown("**🚀 Performance Mode**")
+        use_enhanced = st.checkbox("Enable Enhanced Search", value=False, help="Uses async searching and intelligent keyword expansion to find 5x more leads.")
+        
         batch_module_idx = 0
         if choice_idx >= 4:
             st.markdown("---")
@@ -367,22 +412,26 @@ with tab_run:
                         output_file = get_output_filename(task_name)
                         st.session_state['current_output_file'] = output_file
                         
-                        if choice_idx < 4:
-                            if run_single_search(choice_idx, keyword, output_file):
-                                st.balloons()
-                                show_preview(output_file)
+                        success = False
+                        if use_enhanced:
+                            import asyncio
+                            success = asyncio.run(run_enhanced_task(choice_idx, keyword, output_file))
+                        elif choice_idx < 4:
+                            success = run_single_search(choice_idx, keyword, output_file)
                         elif choice_idx == 4:
-                            p_bar = st.progress(0, text="Initializing Batch...")
-                            if run_batch_mode(batch_module_idx, keyword, output_file, p_bar):
-                                st.balloons()
-                                show_preview(output_file)
-                                p_bar.empty()
+                            progress_bar = st.progress(0, text="Initializing Batch...")
+                            success = run_batch_mode(batch_module_idx, keyword, output_file, progress_bar)
+                            progress_bar.empty()
                         elif choice_idx == 5:
                             t, stop_event = start_automation_thread(keyword, batch_module_idx, output_file)
                             st.session_state['automation_thread'] = t
                             st.session_state['stop_event'] = stop_event
                             st.session_state['job_status'] = 'running'
                             st.rerun()
+
+                        if success:
+                            st.balloons()
+                            show_preview(output_file)
                     except Exception as e:
                         st.error(f"System Error: {e}")
             else:
