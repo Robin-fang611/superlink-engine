@@ -219,7 +219,7 @@ async def run_enhanced_task(module_idx, keyword, output_file):
         # Save results
         from core.deduplicator import Deduplicator
         dedup = Deduplicator()
-        unique_leads = dedup.deduplicate(all_leads)
+        unique_leads = dedup.filter_unique(all_leads)
         
         # Save to CSV using the existing logic
         df = pd.DataFrame(unique_leads)

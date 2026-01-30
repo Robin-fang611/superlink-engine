@@ -53,8 +53,8 @@ If multiple emails or phones are found, choose the most relevant ones.
 Search Results:
 {batch_data_str}
 
-Output MUST be a JSON list of objects. Each object should have keys:
-"company_name", "location", "contact_person", "email", "phone", "business_scope", "source_url"
+Output MUST be a JSON list of objects. Each object should have keys (EXACTLY AS WRITTEN):
+"公司名称", "注册国家/城市", "业务负责人", "公开邮箱", "公开电话", "业务范围", "来源URL"
 """
             try:
                 # 调用父类的 AI 接口

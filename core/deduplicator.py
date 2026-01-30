@@ -54,6 +54,21 @@ class Deduplicator:
             
         return False
 
+    def filter_unique(self, data_list):
+        """
+        Helper method to filter a list of items and return only unique ones.
+        Updates the internal state with new items.
+        """
+        unique_data = []
+        for item in data_list:
+            if not self.is_duplicate(item):
+                unique_data.append(item)
+                self.add(item)
+        
+        if unique_data:
+            self.save()
+        return unique_data
+
     def add(self, item):
         """Add new item to history memory."""
         # Safe string conversion
