@@ -1,0 +1,9 @@
+{
+    "default_model": "glm47",
+    "glm47": {
+        "provider": "zhipuai",
+        "model_name": "glm-4",
+        "temperature": 0.7,
+        "api_key_env": "ZHIPUAI_API_KEY"
+    }
+}

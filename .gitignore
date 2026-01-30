@@ -1,0 +1,47 @@
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Secrets
+.env
+progress_log.json
+output/history_log.json
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data Output
+output/*.csv
+
+# IDEs
+.vscode/
+.idea/
+.trae/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
