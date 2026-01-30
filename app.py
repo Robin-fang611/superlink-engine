@@ -22,6 +22,54 @@ from core.enhanced.async_searcher import AsyncSearcher
 from core.enhanced.enhanced_processor import EnhancedProcessor
 
 # ==============================================================================
+# 0. GLOBAL SESSION MANAGEMENT
+# ==============================================================================
+
+class SessionManager:
+    """全局会话管理器，用于限制并发访问人数"""
+    _instance = None
+    _lock = threading.Lock()
+    _active_sessions = {} # session_id -> last_seen_timestamp
+    MAX_USERS = 3
+    TIMEOUT_SECONDS = 300 # 5分钟无操作自动释放名额
+
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(SessionManager, cls).__new__(cls)
+            return cls._instance
+
+    def update_session(self, session_id):
+        with self._lock:
+            current_time = time.time()
+            # 清理过期会话
+            self._active_sessions = {
+                sid: ts for sid, ts in self._active_sessions.items() 
+                if current_time - ts < self.TIMEOUT_SECONDS
+            }
+            # 更新当前会话
+            self._active_sessions[session_id] = current_time
+
+    def get_active_count(self):
+        with self._lock:
+            current_time = time.time()
+            return len([ts for ts in self._active_sessions.values() if current_time - ts < self.TIMEOUT_SECONDS])
+
+    def can_access(self, session_id):
+        with self._lock:
+            current_time = time.time()
+            # 清理过期会话
+            self._active_sessions = {
+                sid: ts for sid, ts in self._active_sessions.items() 
+                if current_time - ts < self.TIMEOUT_SECONDS
+            }
+            # 如果已经在活跃列表中，允许访问
+            if session_id in self._active_sessions:
+                return True
+            # 如果名额未满，允许访问
+            return len(self._active_sessions) < self.MAX_USERS
+
+# ==============================================================================
 # 1. INITIALIZATION & UI STYLING
 # ==============================================================================
 
@@ -137,6 +185,24 @@ st.set_page_config(
 )
 
 apply_custom_styles()
+
+# --- Session Limiter ---
+from streamlit.runtime.scriptrunner import get_script_run_ctx
+ctx = get_script_run_ctx()
+session_id = ctx.session_id if ctx else "default"
+
+manager = SessionManager()
+if not manager.can_access(session_id):
+    st.error("🚦 系统繁忙 / System Busy")
+    st.warning(f"当前已有 {manager.get_active_count()} 位用户正在使用。为了保证搜索性能，请排队等待名额释放。")
+    st.info("💡 提示：当有其他用户关闭页面或超过 5 分钟未操作后，名额将自动释放。")
+    if st.button("刷新重试"):
+        st.rerun()
+    st.stop()
+
+# 正常访问则更新活跃状态
+manager.update_session(session_id)
+# -----------------------
 
 # Global State Initialization
 if 'init_done' not in st.session_state:
