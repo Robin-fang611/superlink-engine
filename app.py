@@ -88,13 +88,24 @@ def apply_custom_styles():
         <style>
         /* Main Container Styling */
         .main {
-            background-color: #f8f9fa;
+            background-color: #001f3f; /* 深蓝色背景 */
+            color: #FFD700; /* 金色文字 */
         }
         
+        /* 全局文字颜色调整 */
+        .main p, .main span, .main label, .main h1, .main h2, .main h3, .main div {
+            color: #FFD700 !important;
+        }
+
+        /* 针对输入框的文字颜色微调 */
+        input {
+            color: #000 !important; /* 输入内容保持黑色以便阅读 */
+        }
+
         /* Card-like containers */
         div.stButton > button:first-child {
-            background-color: #007bff;
-            color: white;
+            background-color: #FFD700; /* 金色按钮 */
+            color: #001f3f; /* 深蓝色文字 */
             border-radius: 8px;
             padding: 0.5rem 1rem;
             font-weight: 600;
@@ -103,36 +114,41 @@ def apply_custom_styles():
         }
         
         div.stButton > button:hover {
-            background-color: #0056b3;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background-color: #e6c200;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
         
         /* Sidebar styling */
-        .sidebar .sidebar-content {
-            background-image: linear-gradient(#2e7bcf,#2e7bcf);
-            color: white;
+        section[data-testid="stSidebar"] {
+            background-color: #001529;
         }
         
         /* Metric styling */
         [data-testid="stMetricValue"] {
             font-size: 2rem;
-            color: #007bff;
+            color: #FFD700 !important;
         }
         
         /* Custom Header */
         .header-container {
             padding: 1.5rem;
-            background: white;
+            background: #001529;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             margin-bottom: 2rem;
             text-align: center;
+            border: 1px solid #FFD700;
+        }
+        
+        .header-container h1, .header-container p {
+            color: #FFD700 !important;
         }
         
         /* Dataframe styling */
         .stDataFrame {
-            border: 1px solid #e9ecef;
+            border: 1px solid #FFD700;
             border-radius: 8px;
+            background-color: #001f3f;
         }
         </style>
     """, unsafe_allow_html=True)
