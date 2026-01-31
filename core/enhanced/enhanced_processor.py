@@ -22,7 +22,7 @@ class EnhancedProcessor(Processor):
             "phones": list(set(phones))
         }
 
-    def process_batch_enhanced(self, raw_results: List[Dict], batch_size: int = 10) -> List[Dict]:
+    def process_batch_enhanced(self, raw_results: List[Dict], batch_size: int = 15) -> List[Dict]:
         """
         分批处理原始搜索结果，每批次由 AI 进行结构化提取
         """
@@ -44,16 +44,19 @@ class EnhancedProcessor(Processor):
             for idx, item in enumerate(batch):
                 batch_data_str += f"ID: {idx}\nTitle: {item.get('title')}\nSnippet: {item.get('snippet')}\nURL: {item.get('link')}\nRegex_Found: {item['regex_data']}\n---\n"
 
-            prompt = f"""Analyze the following search results for potential B2B business leads.
-For each result, extract: company name, location, key contact, email, phone, and business scope.
+            prompt = f"""Analyze the following search results for B2B business leads (SMEs).
+YOUR GOAL: Extract as many valid SME leads as possible. 
 
-Focus on Small/Medium Enterprises (SMEs). Ignore large corporations, news sites, or directories.
-If multiple emails or phones are found, choose the most relevant ones.
+RULES:
+1. FOCUS: Small/Medium businesses only. Reject giant global brands (DHL, Amazon, etc.).
+2. FLEXIBILITY: If a lead looks like a high-quality SME, extract it even if some fields (like contact person) are missing.
+3. VALIDATION: Check 'Regex_Found' for emails/phones already spotted by regex. 
+4. REJECTION: Ignore news, job boards, and general directories.
 
 Search Results:
 {batch_data_str}
 
-Output MUST be a JSON list of objects. Each object should have keys (EXACTLY AS WRITTEN):
+Output MUST be a JSON list of objects. Each object MUST have these keys (EXACTLY AS WRITTEN):
 "公司名称", "注册国家/城市", "业务负责人", "公开邮箱", "公开电话", "业务范围", "来源URL"
 """
             try:

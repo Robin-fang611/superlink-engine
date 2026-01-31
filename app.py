@@ -276,11 +276,11 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file):
     module_id = str(module_idx + 1)
     # Expand for major regions
     expanded_queries = expander.expand(keyword, module_id)
-    # Limit for performance mode demo (can be increased)
-    target_queries = expanded_queries[:5] 
+    # Target more queries for maximum coverage
+    target_queries = expanded_queries[:20] 
     
-    st.info(f"🚀 Launching Parallel Search for {len(target_queries)} queries...")
-    raw_results = await searcher.search_batch(target_queries, pages_per_query=2)
+    st.info(f"🚀 Launching Parallel Search for {len(target_queries)} queries (Depth: 5 pages)...")
+    raw_results = await searcher.search_batch(target_queries, pages_per_query=5)
     
     if not raw_results:
         st.warning("No results found in enhanced mode.")
