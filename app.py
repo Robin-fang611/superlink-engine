@@ -184,7 +184,7 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.markdown('<div class="header-container"><h1>🔒 访问受限</h1><p>请输入引擎访问密码以继续。</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="header-container"><h1>欢迎来到superlink数据库</h1><p>请输入引擎访问密码以继续。</p></div>', unsafe_allow_html=True)
         st.text_input("密码", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
@@ -460,8 +460,8 @@ def start_automation_thread(keyword, module_choice, output_file):
 # Header
 st.markdown("""
     <div class="header-container">
-        <h1 style='color: #007bff; margin-bottom: 0;'>🕸️ SuperLink 数据引擎</h1>
-        <p style='color: #6c757d; font-size: 1.1rem;'>专业的 B2B 商业线索挖掘工厂</p>
+        <h1 style='color: #FFD700; margin-bottom: 0;'>欢迎来到superlink数据库</h1>
+        <p style='color: #FFD700; font-size: 1.1rem;'>专业的 B2B 商业线索挖掘工厂</p>
     </div>
 """, unsafe_allow_html=True)
 
