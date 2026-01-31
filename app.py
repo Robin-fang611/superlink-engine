@@ -168,18 +168,18 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.markdown('<div class="header-container"><h1>🔒 Access Restricted</h1><p>Please enter the engine password to continue.</p></div>', unsafe_allow_html=True)
-        st.text_input("Password", type="password", on_change=password_entered, key="password")
+        st.markdown('<div class="header-container"><h1>🔒 访问受限</h1><p>请输入引擎访问密码以继续。</p></div>', unsafe_allow_html=True)
+        st.text_input("密码", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        st.text_input("Password", type="password", on_change=password_entered, key="password")
-        st.error("😕 Password incorrect")
+        st.text_input("密码", type="password", on_change=password_entered, key="password")
+        st.error("😕 密码错误")
         return False
     return True
 
 # Page Config
 st.set_page_config(
-    page_title="SuperLink Data Engine",
+    page_title="SuperLink 数据引擎",
     page_icon="🚀",
     layout="wide"
 )
@@ -237,25 +237,25 @@ def show_preview(file_path):
     if os.path.exists(file_path):
         try:
             df = pd.read_csv(file_path)
-            st.success(f"✅ Data Loaded: `{os.path.basename(file_path)}`")
+            st.success(f"✅ 数据已加载: `{os.path.basename(file_path)}`")
             
             col1, col2 = st.columns([1, 4])
             with col1:
                 with open(file_path, "rb") as f:
                     st.download_button(
-                        label="📥 Download CSV",
+                        label="📥 下载 CSV",
                         data=f,
                         file_name=os.path.basename(file_path),
                         mime="text/csv",
                     )
             with col2:
-                st.caption(f"Total Rows Found: **{len(df)}**")
+                st.caption(f"共找到线索: **{len(df) - 1}** 条 (首行元数据除外)")
             
             st.dataframe(df.head(100), use_container_width=True)
         except Exception as e:
-            st.warning(f"Preview Error: {e}")
+            st.warning(f"预览错误: {e}")
     else:
-        st.info("No data file available.")
+        st.info("暂无可用数据文件。")
 
 def list_history_files():
     files = glob.glob("output/*.csv")
@@ -272,22 +272,22 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file):
     searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
     processor = EnhancedProcessor()
     
-    st.info("🔍 Expanding keywords for maximum coverage...")
+    st.info("🔍 正在智能扩展关键词以实现最大覆盖...")
     module_id = str(module_idx + 1)
     # Expand for major regions
     expanded_queries = expander.expand(keyword, module_id)
     # Target more queries for maximum coverage
     target_queries = expanded_queries[:20] 
     
-    st.info(f"🚀 Launching Parallel Search for {len(target_queries)} queries (Depth: 5 pages)...")
+    st.info(f"🚀 正在启动 {len(target_queries)} 个子查询的并行搜索 (深度: 5页)...")
     raw_results = await searcher.search_batch(target_queries, pages_per_query=5)
     
     if not raw_results:
-        st.warning("No results found in enhanced mode.")
+        st.warning("增强模式下未找到任何结果。")
         return False
         
-    st.info(f"🧠 AI Processing {len(raw_results)} results in batches...")
-    all_leads = processor.process_batch_enhanced(raw_results, batch_size=10)
+    st.info(f"🧠 AI 正在分批处理 {len(raw_results)} 条原始数据...")
+    all_leads = processor.process_batch_enhanced(raw_results, batch_size=15)
     
     if all_leads:
         # Save results
@@ -300,9 +300,9 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file):
         
         # Create metadata row
         metadata = pd.DataFrame([{
-            "公司名称": f"TASK: {module_name}",
-            "注册国家/城市": f"KEYWORD: {keyword}",
-            "业务负责人": f"TIME: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "公司名称": f"任务模块: {module_name}",
+            "注册国家/城市": f"核心关键词: {keyword}",
+            "业务负责人": f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
             "公开邮箱": "---",
             "公开电话": "---",
             "业务范围": "---",
@@ -313,27 +313,27 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file):
         final_df = pd.concat([metadata, df], ignore_index=True)
         final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
         
-        st.success(f"✨ Enhanced Task Complete! Found {len(unique_leads)} unique leads.")
+        st.success(f"✨ 增强任务完成！共捕获 {len(unique_leads)} 条唯一线索。")
         return True
     return False
 
 def show_api_status_dashboard():
     with st.sidebar:
-        st.markdown("### 📊 System Dashboard")
+        st.markdown("### 📊 系统仪表盘")
         status = st.session_state.get('api_status', {})
         
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Serper API**")
-            st.markdown("🟢 OK" if status.get("serper") else "🔴 Missing")
+            st.markdown(f"**Serper 搜索**")
+            st.markdown("🟢 正常" if status.get("serper") else "🔴 缺失")
         with col2:
-            st.markdown(f"**Zhipu AI**")
-            st.markdown("🟢 OK" if status.get("zhipu") else "🔴 Missing")
+            st.markdown(f"**智谱 AI**")
+            st.markdown("🟢 正常" if status.get("zhipu") else "🔴 缺失")
             
         st.markdown("---")
-        st.markdown("### 🛠️ Runtime Info")
-        st.caption(f"Working Dir: `{os.getcwd()}`")
-        st.caption(f"Server Port: `3000` (Mapped)")
+        st.markdown("### 🛠️ 运行信息")
+        st.caption(f"当前目录: `{os.getcwd()}`")
+        st.caption(f"服务器端口: `3000` (映射中)")
 
 # ==============================================================================
 # 4. CORE LOGIC ADAPTERS
@@ -346,7 +346,7 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
     
     status_container = st.container()
     with status_container:
-        st.info("🚀 Starting Search Engine...")
+        st.info("🚀 正在启动搜索引擎...")
     
     try:
         if choice_idx == 0: results = searcher.search_logistics_usa_europe(keyword)
@@ -356,10 +356,10 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
         else: results = {}
             
         if not results:
-            st.warning("⚠️ No results found. Check keywords or proxy settings.")
+            st.warning("⚠️ 未找到任何结果。请检查关键词或代理设置。")
             return False
 
-        st.info("🧠 AI Analysis in progress...")
+        st.info("🧠 智谱 AI 正在分析并提取线索...")
         
         # We need to manually save here to include metadata if needed, 
         # but let's first get the data from processor.
@@ -373,9 +373,9 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
         if os.path.exists(output_file):
             df = pd.read_csv(output_file)
             metadata = pd.DataFrame([{
-                "公司名称": f"TASK: {module_name}",
-                "注册国家/城市": f"KEYWORD: {keyword}",
-                "业务负责人": f"TIME: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                "公司名称": f"任务模块: {module_name}",
+                "注册国家/城市": f"核心关键词: {keyword}",
+                "业务负责人": f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 "公开邮箱": "---",
                 "公开电话": "---",
                 "业务范围": "---",
@@ -384,10 +384,10 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
             final_df = pd.concat([metadata, df], ignore_index=True)
             final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
 
-        st.success("✨ Task Completed Successfully!")
+        st.success("✨ 任务成功完成！")
         return True
     except Exception as e:
-        st.error(f"❌ Execution Error: {str(e)}")
+        st.error(f"❌ 运行出错: {str(e)}")
         return False
 
 def run_batch_mode(module_choice, base_keyword, output_file, progress_bar):
@@ -395,20 +395,20 @@ def run_batch_mode(module_choice, base_keyword, output_file, progress_bar):
     processor = Processor()
     module_id = str(module_choice + 1)
     
-    st.info(f"Expanding queries for module {module_id}...")
+    st.info(f"正在为模块 {module_id} 扩展查询关键词...")
     queries = searcher.expand_keywords(base_keyword, module_id)
     total = len(queries)
     
     for i, query in enumerate(queries):
         progress = (i + 1) / total
-        progress_bar.progress(progress, text=f"Query {i+1}/{total}: {query}")
+        progress_bar.progress(progress, text=f"进度 {i+1}/{total}: {query}")
         try:
             results = searcher._execute_search(query, num_results=20)
             if results and "organic" in results:
                 processor.process_and_save(results, output_file=output_file)
             if i < total - 1: time.sleep(2)
         except Exception as e:
-            st.error(f"Batch Error on '{query}': {e}")
+            st.error(f"批量模式错误 '{query}': {e}")
     return True
 
 def load_progress_log():
@@ -444,65 +444,65 @@ def start_automation_thread(keyword, module_choice, output_file):
 # Header
 st.markdown("""
     <div class="header-container">
-        <h1 style='color: #007bff; margin-bottom: 0;'>🕸️ SuperLink Data Engine</h1>
-        <p style='color: #6c757d; font-size: 1.1rem;'>Professional B2B Lead Generation Factory</p>
+        <h1 style='color: #007bff; margin-bottom: 0;'>🕸️ SuperLink 数据引擎</h1>
+        <p style='color: #6c757d; font-size: 1.1rem;'>专业的 B2B 商业线索挖掘工厂</p>
     </div>
 """, unsafe_allow_html=True)
 
 show_api_status_dashboard()
 
-tab_run, tab_history, tab_settings = st.tabs(["🚀 Launch Engine", "📂 Lead Repository", "⚙️ System Settings"])
+tab_run, tab_history, tab_settings = st.tabs(["🚀 启动引擎", "📂 线索库", "⚙️ 系统设置"])
 
 # --- TAB 1: LAUNCH ENGINE ---
 with tab_run:
     col_input, col_status = st.columns([1, 2])
     
     with col_input:
-        st.markdown("### 🛠️ Task Configuration")
-        task_name = st.text_input("Task Identifier", value="search_leads", help="Used for file naming")
+        st.markdown("### 🛠️ 任务配置")
+        task_name = st.text_input("任务标识", value="search_leads", help="用于生成导出的文件名")
         module_options = [
-            "1. Logistics (USA/EU)",
-            "2. Importers (USA/EU)",
-            "3. CN Forwarders",
-            "4. CN Exporters",
-            "5. Batch (Multi-Query)",
-            "6. Factory (Full Auto)"
+            "1. 欧美物流商 (Logistics)",
+            "2. 欧美进口商 (Importers)",
+            "3. 中国货代同行 (CN Forwarders)",
+            "4. 中国出口工厂 (CN Exporters)",
+            "5. 批量模式 (多查询)",
+            "6. 工厂模式 (全自动)"
         ]
-        selected_option = st.selectbox("Select Strategy", module_options)
+        selected_option = st.selectbox("选择搜索策略", module_options)
         choice_idx = module_options.index(selected_option)
         
-        keyword = st.text_input("Target Keyword", placeholder="e.g. furniture, electronics")
+        keyword = st.text_input("目标关键词", placeholder="例如：家具, 电子产品, 纺织品")
         
         st.markdown("---")
-        st.markdown("**🚀 Performance Mode**")
-        use_enhanced = st.checkbox("Enable Enhanced Search", value=False, help="Uses async searching and intelligent keyword expansion to find 5x more leads.")
+        st.markdown("**🚀 性能增强模式**")
+        use_enhanced = st.checkbox("开启增强搜索", value=False, help="使用异步搜索和智能关键词裂变，可挖掘出 5-10 倍以上的线索量。")
         
         batch_module_idx = 0
         if choice_idx >= 4:
             st.markdown("---")
-            sub_options = ["Logistics", "Importers", "CN Forwarders", "CN Exporters"]
-            batch_sub_choice = st.selectbox("Base Logic for Batch/Factory", sub_options)
+            sub_options = ["物流商", "进口商", "货代同行", "出口工厂"]
+            batch_sub_choice = st.selectbox("批量/工厂模式的基础逻辑", sub_options)
             batch_module_idx = sub_options.index(batch_sub_choice)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        start_btn = st.button("🚀 Start Engine", type="primary", use_container_width=True)
+        start_btn = st.button("🚀 开始执行", type="primary", use_container_width=True)
 
     with col_status:
-        st.markdown("### 📈 Live Execution Status")
+        st.markdown("### 📈 实时执行状态")
         if 'job_status' not in st.session_state: st.session_state['job_status'] = 'idle'
 
         if st.session_state['job_status'] == 'running':
-            st.info("🔄 Engine is running in background city-by-city...")
+            st.info("🔄 引擎正在后台按城市轮询执行...")
             progress_data = load_progress_log()
             completed = progress_data.get("completed_cities", [])
             
             m1, m2 = st.columns(2)
-            m1.metric("Cities Completed", len(completed))
-            m2.metric("Last Found", completed[-1] if completed else "None")
+            m1.metric("已完成城市", len(completed))
+            m2.metric("最后搜索城市", completed[-1] if completed else "无")
             
-            if st.button("🛑 STOP ENGINE", type="secondary"):
+            if st.button("🛑 停止引擎", type="secondary"):
                 if st.session_state.get('stop_event'): st.session_state['stop_event'].set()
-                st.warning("Stopping sequence initiated...")
+                st.warning("正在初始化停止程序...")
                 if st.session_state.get('automation_thread'): st.session_state['automation_thread'].join(timeout=5)
                 st.session_state['job_status'] = 'idle'
                 st.rerun()
@@ -511,15 +511,15 @@ with tab_run:
             st.rerun()
 
         elif st.session_state['job_status'] == 'done':
-            st.success("🏁 Factory Mode Task Finished!")
-            if st.button("Reset Status"):
+            st.success("🏁 工厂模式任务已执行完毕！")
+            if st.button("重置状态"):
                 st.session_state['job_status'] = 'idle'
                 st.rerun()
         
         elif st.session_state['job_status'] == 'idle':
             if start_btn:
                 if not keyword:
-                    st.error("Missing target keyword.")
+                    st.error("请输入目标关键词。")
                 else:
                     try:
                         output_file = get_output_filename(task_name, keyword, selected_option)
@@ -532,7 +532,7 @@ with tab_run:
                         elif choice_idx < 4:
                             success = run_single_search(choice_idx, keyword, selected_option, output_file)
                         elif choice_idx == 4:
-                            progress_bar = st.progress(0, text="Initializing Batch...")
+                            progress_bar = st.progress(0, text="正在初始化批量任务...")
                             success = run_batch_mode(batch_module_idx, keyword, output_file, progress_bar)
                             progress_bar.empty()
                         elif choice_idx == 5:
@@ -546,40 +546,40 @@ with tab_run:
                             st.balloons()
                             show_preview(output_file)
                     except Exception as e:
-                        st.error(f"System Error: {e}")
+                        st.error(f"系统运行出错: {e}")
             else:
-                st.caption("Waiting for mission parameters...")
+                st.caption("等待任务参数输入...")
 
 # --- TAB 2: LEAD REPOSITORY ---
 with tab_history:
-    st.header("📂 Lead Repository")
+    st.header("📂 线索库")
     history_files = list_history_files()
     if not history_files:
-        st.info("No leads collected yet. Start a task to generate CSV files.")
+        st.info("目前还没有采集到任何线索。启动一个任务来生成 CSV 文件吧。")
     else:
-        selected_file = st.selectbox("Browse History", history_files, 
+        selected_file = st.selectbox("浏览历史记录", history_files, 
                                      format_func=lambda x: f"📁 {os.path.basename(x)} | {datetime.fromtimestamp(os.path.getmtime(x)).strftime('%Y-%m-%d %H:%M')}")
         if selected_file:
             st.markdown("---")
             show_preview(selected_file)
-            if st.button("🗑️ Delete Selected File"):
+            if st.button("🗑️ 删除选中文件"):
                 os.remove(selected_file)
-                st.success("File deleted.")
+                st.success("文件已成功删除。")
                 st.rerun()
 
 # --- TAB 3: SYSTEM SETTINGS ---
 with tab_settings:
-    st.header("⚙️ Configuration Management")
-    st.write("Current Environment Configuration:")
+    st.header("⚙️ 配置管理")
+    st.write("当前运行环境配置：")
     
-    with st.expander("🔑 API Credentials"):
-        st.info("These keys are loaded from your `.env` file.")
-        st.text_input("Serper API Key", value=os.getenv("SERPER_API_KEY", "Not Set"), type="password", disabled=True)
-        st.text_input("Zhipu AI Key", value=os.getenv("ZHIPUAI_API_KEY", "Not Set"), type="password", disabled=True)
+    with st.expander("🔑 API 凭证"):
+        st.info("这些密钥是从您的 .env 文件或云端配置中加载的。")
+        st.text_input("Serper 搜索密钥", value=os.getenv("SERPER_API_KEY", "未设置"), type="password", disabled=True)
+        st.text_input("智谱 AI 密钥", value=os.getenv("ZHIPUAI_API_KEY", "未设置"), type="password", disabled=True)
         
-    with st.expander("🌐 Proxy Settings"):
-        st.write(f"Proxy Enabled: `{os.getenv('USE_PROXY', 'True')}`")
-        st.write(f"Proxy URL: `{os.getenv('HTTP_PROXY', 'Not Set')}`")
+    with st.expander("🌐 代理设置"):
+        st.write(f"是否启用代理: `{os.getenv('USE_PROXY', 'True')}`")
+        st.write(f"代理地址: `{os.getenv('HTTP_PROXY', '未设置')}`")
         
     st.markdown("---")
-    st.caption("v1.2.0 | SuperLink Data Engine | Robin")
+    st.caption("v1.2.0 | SuperLink 数据引擎 | Robin (SuperLink 研发团队)")
