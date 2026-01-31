@@ -523,15 +523,15 @@ with tab_run:
                 else:
                     try:
                         output_file = get_output_filename(task_name, keyword, selected_option)
-                    st.session_state['current_output_file'] = output_file
+                        st.session_state['current_output_file'] = output_file
                         
                         success = False
                         if use_enhanced:
-                        import asyncio
-                        success = asyncio.run(run_enhanced_task(choice_idx, keyword, selected_option, output_file))
-                    elif choice_idx < 4:
-                        success = run_single_search(choice_idx, keyword, selected_option, output_file)
-                    elif choice_idx == 4:
+                            import asyncio
+                            success = asyncio.run(run_enhanced_task(choice_idx, keyword, selected_option, output_file))
+                        elif choice_idx < 4:
+                            success = run_single_search(choice_idx, keyword, selected_option, output_file)
+                        elif choice_idx == 4:
                             progress_bar = st.progress(0, text="Initializing Batch...")
                             success = run_batch_mode(batch_module_idx, keyword, output_file, progress_bar)
                             progress_bar.empty()
@@ -541,7 +541,7 @@ with tab_run:
                             st.session_state['stop_event'] = stop_event
                             st.session_state['job_status'] = 'running'
                             st.rerun()
-
+                            
                         if success:
                             st.balloons()
                             show_preview(output_file)
