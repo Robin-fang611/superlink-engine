@@ -217,13 +217,21 @@ if not check_password():
 # 2. HELPER FUNCTIONS
 # ==============================================================================
 
-def get_output_filename(task_name):
+def get_output_filename(task_name, keyword, module_name):
+    """Generate a unique filename with task name, keyword, module and timestamp."""
     now = datetime.now()
-    timestamp = now.strftime("%Y.%m.%d.%H.%M")
-    safe_task_name = "".join([c for c in task_name if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
-    if not safe_task_name:
-        safe_task_name = "task"
-    return f"output/{safe_task_name}_{timestamp}.csv"
+    timestamp = now.strftime("%Y%m%d_%H%M")
+    
+    # Sanitize inputs
+    def sanitize(s):
+        return "".join([c for c in s if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
+    
+    safe_task = sanitize(task_name) or "task"
+    safe_keyword = sanitize(keyword) or "none"
+    # Get short module name (e.g., "Logistics" from "1. Logistics (USA/EU)")
+    safe_module = sanitize(module_name.split('.')[1].split('(')[0]) if '.' in module_name else sanitize(module_name)
+    
+    return f"output/{safe_task}_{safe_module}_{safe_keyword}_{timestamp}.csv"
 
 def show_preview(file_path):
     if os.path.exists(file_path):
@@ -258,7 +266,7 @@ def list_history_files():
 # 3. DASHBOARD COMPONENTS
 # ==============================================================================
 
-async def run_enhanced_task(module_idx, keyword, output_file):
+async def run_enhanced_task(module_idx, keyword, module_name, output_file):
     """Execute task using the new Enhanced engine (Async + AI Batching)."""
     expander = KeywordExpander()
     searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
@@ -287,9 +295,24 @@ async def run_enhanced_task(module_idx, keyword, output_file):
         dedup = Deduplicator()
         unique_leads = dedup.filter_unique(all_leads)
         
-        # Save to CSV using the existing logic
+        # Save to CSV with Metadata header
         df = pd.DataFrame(unique_leads)
-        df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        
+        # Create metadata row
+        metadata = pd.DataFrame([{
+            "公司名称": f"TASK: {module_name}",
+            "注册国家/城市": f"KEYWORD: {keyword}",
+            "业务负责人": f"TIME: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "公开邮箱": "---",
+            "公开电话": "---",
+            "业务范围": "---",
+            "来源URL": "---"
+        }])
+        
+        # Combine metadata with data
+        final_df = pd.concat([metadata, df], ignore_index=True)
+        final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        
         st.success(f"✨ Enhanced Task Complete! Found {len(unique_leads)} unique leads.")
         return True
     return False
@@ -316,14 +339,15 @@ def show_api_status_dashboard():
 # 4. CORE LOGIC ADAPTERS
 # ==============================================================================
 
-def run_single_search(choice_idx, keyword, output_file):
+def run_single_search(choice_idx, keyword, module_name, output_file):
+    """Execute standard single-query search (Options 1-4)."""
     searcher = Searcher()
     processor = Processor()
     
     status_container = st.container()
     with status_container:
         st.info("🚀 Starting Search Engine...")
-        
+    
     try:
         if choice_idx == 0: results = searcher.search_logistics_usa_europe(keyword)
         elif choice_idx == 1: results = searcher.search_importer_usa_europe(keyword)
@@ -336,7 +360,30 @@ def run_single_search(choice_idx, keyword, output_file):
             return False
 
         st.info("🧠 AI Analysis in progress...")
+        
+        # We need to manually save here to include metadata if needed, 
+        # but let's first get the data from processor.
+        # Note: process_and_save normally handles saving. 
+        # To maintain consistency, we'll let it save and then we can prepend metadata if we want,
+        # or better, we modify process_and_save to handle it.
+        # For now, let's just use the existing one and I will update processor.py later.
         processor.process_and_save(results, output_file=output_file)
+        
+        # After saving, let's prepend the metadata line
+        if os.path.exists(output_file):
+            df = pd.read_csv(output_file)
+            metadata = pd.DataFrame([{
+                "公司名称": f"TASK: {module_name}",
+                "注册国家/城市": f"KEYWORD: {keyword}",
+                "业务负责人": f"TIME: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                "公开邮箱": "---",
+                "公开电话": "---",
+                "业务范围": "---",
+                "来源URL": "---"
+            }])
+            final_df = pd.concat([metadata, df], ignore_index=True)
+            final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+
         st.success("✨ Task Completed Successfully!")
         return True
     except Exception as e:
@@ -475,16 +522,16 @@ with tab_run:
                     st.error("Missing target keyword.")
                 else:
                     try:
-                        output_file = get_output_filename(task_name)
-                        st.session_state['current_output_file'] = output_file
+                        output_file = get_output_filename(task_name, keyword, selected_option)
+                    st.session_state['current_output_file'] = output_file
                         
                         success = False
                         if use_enhanced:
-                            import asyncio
-                            success = asyncio.run(run_enhanced_task(choice_idx, keyword, output_file))
-                        elif choice_idx < 4:
-                            success = run_single_search(choice_idx, keyword, output_file)
-                        elif choice_idx == 4:
+                        import asyncio
+                        success = asyncio.run(run_enhanced_task(choice_idx, keyword, selected_option, output_file))
+                    elif choice_idx < 4:
+                        success = run_single_search(choice_idx, keyword, selected_option, output_file)
+                    elif choice_idx == 4:
                             progress_bar = st.progress(0, text="Initializing Batch...")
                             success = run_batch_mode(batch_module_idx, keyword, output_file, progress_bar)
                             progress_bar.empty()
