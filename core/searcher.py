@@ -44,6 +44,27 @@ class Searcher:
             print(f"[Error] Search failed: {e}")
             return {}
 
+    def search_deep_contacts(self, domain, contact_keywords=None):
+        """
+        使用高级搜索指令挖掘特定域名的深度联系方式。
+        """
+        contact_keywords = contact_keywords or ["buyer", "procurement", "manager", "logistics"]
+        queries = [
+            f"site:{domain} \"@\"",
+            f"\"@{domain}\" {' OR '.join(contact_keywords)}",
+            f"site:{domain} contact us email",
+            f"\"{domain}\" filetype:pdf contact"
+        ]
+        
+        all_organic = []
+        for q in queries:
+            print(f"[DeepSearch] Targeting domain: {domain} with query: {q}")
+            res = self._execute_search(q, num_results=10)
+            if res and "organic" in res:
+                all_organic.extend(res["organic"])
+        
+        return {"organic": all_organic}
+
     def expand_keywords(self, base_keyword, module_type):
         """
         Generate a list of specific queries to maximize coverage (Batch Mode).

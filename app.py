@@ -20,6 +20,9 @@ from core.automation import AutomationManager
 from core.enhanced.keyword_expander import KeywordExpander
 from core.enhanced.async_searcher import AsyncSearcher
 from core.enhanced.enhanced_processor import EnhancedProcessor
+from core.enhanced.email_extractor import EmailExtractor
+from core.enhanced.person_searcher import PersonSearcher
+from core.enhanced.email_guesser import EmailGuesser
 
 # ==============================================================================
 # 0. GLOBAL SESSION MANAGEMENT
@@ -294,8 +297,8 @@ def list_history_files():
 # 3. DASHBOARD COMPONENTS
 # ==============================================================================
 
-async def run_enhanced_task(module_idx, keyword, module_name, output_file):
-    """Execute task using the new Enhanced engine (Async + AI Batching)."""
+async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_dive=False, target_positions=None):
+    """Execute task using the new Enhanced engine (Async + AI Batching + Deep Dive)."""
     expander = KeywordExpander()
     searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
     processor = EnhancedProcessor()
@@ -317,12 +320,63 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file):
     st.info(f"🧠 AI 正在分批处理 {len(raw_results)} 条原始数据...")
     all_leads = processor.process_batch_enhanced(raw_results, batch_size=15)
     
-    if all_leads:
-        # Save results
-        from core.deduplicator import Deduplicator
-        dedup = Deduplicator()
-        unique_leads = dedup.filter_unique(all_leads)
+    if not all_leads:
+        st.warning("AI 处理后未提取到有效线索。")
+        return False
+
+    # --- DEEP DIVE LOGIC ---
+    if deep_dive:
+        st.info("🎯 正在执行联系人深挖 (Deep Dive)...")
+        extractor = EmailExtractor()
+        person_searcher = PersonSearcher()
+        guesser = EmailGuesser()
         
+        progress_text = "正在深挖联系人信息..."
+        dive_progress = st.progress(0, text=progress_text)
+        
+        for i, lead in enumerate(all_leads):
+            dive_progress.progress((i + 1) / len(all_leads), text=f"深挖中 ({i+1}/{len(all_leads)}): {lead.get('公司名称')}")
+            
+            # 1. 官网邮箱深挖
+            url = lead.get('来源URL')
+            if url and url.startswith("http"):
+                found_emails = extractor.extract_from_website(url)
+                if found_emails:
+                    current_email = lead.get('公开邮箱')
+                    if not current_email or current_email in ["n/a", "none", ""]:
+                        lead['公开邮箱'] = found_emails[0]
+                    # 记录额外发现的邮箱
+                    lead['备用邮箱'] = ", ".join(found_emails[1:3])
+            
+            # 2. LinkedIn 关键决策人深挖
+            company = lead.get('公司名称')
+            if company:
+                makers = person_searcher.find_decision_makers(company, target_positions)
+                if makers:
+                    # 尝试为第一位决策人猜测邮箱
+                    domain = urlparse(url).netloc if url else ""
+                    if domain:
+                        p_emails = guesser.guess_and_verify(makers[0]['name'], domain)
+                        if p_emails:
+                            makers[0]['email'] = p_emails[0]
+                    
+                    # 格式化存入线索库
+                    maker_info = []
+                    for m in makers[:2]: # 只取前两位
+                        info = f"{m['name']} ({m['position']})"
+                        if m.get('email'): info += f" - {m['email']}"
+                        maker_info.append(info)
+                    lead['关键决策人'] = " | ".join(maker_info)
+        
+        dive_progress.empty()
+    # -----------------------
+
+    # Save results
+    from core.deduplicator import Deduplicator
+    dedup = Deduplicator()
+    unique_leads = dedup.filter_unique(all_leads)
+    
+    if unique_leads:
         # Save to CSV with Metadata header
         df = pd.DataFrame(unique_leads)
         
@@ -505,6 +559,14 @@ with tab_run:
         st.markdown("**🚀 性能增强模式**")
         use_enhanced = st.checkbox("开启增强搜索", value=False, help="使用异步搜索和智能关键词裂变，可挖掘出 5-10 倍以上的线索量。")
         
+        st.markdown("**🎯 联系人深挖 (Deep Dive)**")
+        deep_contacts = st.checkbox("深度挖掘关键人", value=False, help="开启后，系统将自动挖掘 LinkedIn 关键人并尝试获取其个人邮箱。")
+        target_positions = st.multiselect(
+            "目标职位",
+            ["Purchasing", "Logistics", "Procurement", "CEO", "Founder", "Owner", "Manager"],
+            default=["Purchasing", "Logistics"]
+        )
+        
         batch_module_idx = 0
         if choice_idx >= 4:
             st.markdown("---")
@@ -556,7 +618,14 @@ with tab_run:
                         success = False
                         if use_enhanced:
                             import asyncio
-                            success = asyncio.run(run_enhanced_task(choice_idx, keyword, selected_option, output_file))
+                            success = asyncio.run(run_enhanced_task(
+                                choice_idx, 
+                                keyword, 
+                                selected_option, 
+                                output_file, 
+                                deep_dive=deep_contacts, 
+                                target_positions=target_positions
+                            ))
                         elif choice_idx < 4:
                             success = run_single_search(choice_idx, keyword, selected_option, output_file)
                         elif choice_idx == 4:
