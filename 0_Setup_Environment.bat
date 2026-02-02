@@ -44,7 +44,14 @@ if not exist .env (
     echo APP_PASSWORD=admin123 >> .env
     echo USE_PROXY=True >> .env
     echo HTTP_PROXY=http://127.0.0.1:7897 >> .env
-    echo [WARN] 已创建 .env 模板，请务必填写 API Key！
+    echo # Email Marketing Settings >> .env
+    echo SENDER_EMAIL=your_email@example.com >> .env
+    echo SENDER_PASSWORD=your_app_password >> .env
+    echo SMTP_SERVER=smtp.example.com >> .env
+    echo SMTP_PORT=465 >> .env
+    echo IMAP_SERVER=imap.example.com >> .env
+    echo IMAP_PORT=993 >> .env
+    echo [WARN] 已创建 .env 模板，请务必填写 API Key 和邮件设置！
 ) else (
     echo [OK] .env 配置文件已存在。
 )

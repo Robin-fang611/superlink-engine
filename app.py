@@ -153,19 +153,31 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
+from core.database import DatabaseHandler
+from core.verifier import EmailVerifier
+from core.email_sender import EmailSender
+from core.feedback_processor import FeedbackProcessor
+
+# ... existing code ...
+
 def init_environment():
     """Initialize environment variables and directories."""
     load_dotenv()
     os.makedirs("output", exist_ok=True)
+    os.makedirs("templates", exist_ok=True)
     
     # Check for .env file or Streamlit Secrets
     serper_key = os.getenv("SERPER_API_KEY") or safe_get_secret("SERPER_API_KEY")
     zhipu_key = os.getenv("ZHIPUAI_API_KEY") or safe_get_secret("ZHIPUAI_API_KEY")
     
+    # Init DB
+    db = DatabaseHandler()
+    
     status = {
         "serper": bool(serper_key),
         "zhipu": bool(zhipu_key),
-        "output_dir": os.path.exists("output")
+        "output_dir": os.path.exists("output"),
+        "db_ok": True
     }
     return status
 
@@ -467,7 +479,7 @@ st.markdown("""
 
 show_api_status_dashboard()
 
-tab_run, tab_history, tab_settings = st.tabs(["🚀 启动引擎", "📂 线索库", "⚙️ 系统设置"])
+tab_run, tab_history, tab_marketing, tab_feedback, tab_settings = st.tabs(["🚀 启动引擎", "📂 线索库", "📧 自动营销", "📊 反馈总结", "⚙️ 系统设置"])
 
 # --- TAB 1: LAUNCH ENGINE ---
 with tab_run:
@@ -583,7 +595,91 @@ with tab_history:
                 st.success("文件已成功删除。")
                 st.rerun()
 
-# --- TAB 3: SYSTEM SETTINGS ---
+# --- TAB 3: AUTOMATED MARKETING ---
+with tab_marketing:
+    st.header("📧 自动化邮件营销")
+    db = DatabaseHandler()
+    
+    col_stat1, col_stat2, col_stat3 = st.columns(3)
+    with col_stat1:
+        try:
+            with db.get_connection() as conn:
+                count = conn.execute("SELECT COUNT(*) FROM verified_leads WHERE verification_status='valid'").fetchone()[0]
+        except:
+            count = 0
+        st.metric("待营销有效线索", count)
+    
+    st.markdown("### 🛠️ 营销任务配置")
+    outreach_subject = st.text_input("邮件主题模板", value="Partnership Opportunity for {company_name}")
+    template_files = glob.glob("templates/*.html")
+    selected_tpl = st.selectbox("选择邮件模板", [os.path.basename(f) for f in template_files] if template_files else ["default.html"])
+    
+    rate_limit = st.slider("发送间隔 (秒)", 1, 10, 3)
+    
+    if st.button("🚀 开始批量群发", type="primary"):
+        import sqlite3
+        with db.get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            try:
+                leads = conn.execute("SELECT * FROM verified_leads WHERE verification_status='valid'").fetchall()
+                leads_dict = [dict(row) for row in leads]
+            except:
+                leads_dict = []
+            
+        if not leads_dict:
+            st.warning("目前没有验证成功的有效线索。")
+        else:
+            sender = EmailSender()
+            progress_bar = st.progress(0, text="正在发送...")
+            for i, lead in enumerate(leads_dict):
+                success, msg = sender.send_email(
+                    lead['email'], 
+                    outreach_subject.format(company_name=lead['company_name']),
+                    selected_tpl,
+                    {"company_name": lead['company_name'], "contact_person": lead['contact_person'] or "Partner", "business_scope": lead['business_scope']}
+                )
+                db.log_email_sent(lead['id'], lead['email'], outreach_subject, selected_tpl, 'sent' if success else 'failed', msg)
+                progress_bar.progress((i+1)/len(leads_dict), text=f"进度: {i+1}/{len(leads_dict)} - {lead['email']}")
+                time.sleep(rate_limit)
+            st.success("批量营销任务执行完毕！")
+
+# --- TAB 4: FEEDBACK ANALYSIS ---
+with tab_feedback:
+    st.header("📊 营销效果与反馈分析")
+    
+    if st.button("📥 同步最新反馈"):
+        with st.spinner("正在连接邮箱获取回复..."):
+            processor = FeedbackProcessor()
+            replies, msg = processor.fetch_latest_replies()
+            if replies:
+                db = DatabaseHandler()
+                for reply in replies:
+                    analysis = processor.analyze_intent(reply['body'])
+                    reply['category'] = analysis.get('category')
+                    reply['analysis'] = analysis.get('reason')
+                    db.add_feedback(reply)
+                st.success(f"成功同步 {len(replies)} 条新反馈！")
+            else:
+                st.info(f"暂无新回复: {msg}")
+
+    db = DatabaseHandler()
+    try:
+        with db.get_connection() as conn:
+            df_feedback = pd.read_sql_query("SELECT sender_email, subject, intent_category, received_at FROM feedback_records ORDER BY received_at DESC", conn)
+    except:
+        df_feedback = pd.DataFrame()
+    
+    if not df_feedback.empty:
+        st.markdown("### 📩 客户意向概览")
+        # 简单统计图
+        intent_counts = df_feedback['intent_category'].value_counts()
+        st.bar_chart(intent_counts)
+        
+        st.dataframe(df_feedback, use_container_width=True)
+    else:
+        st.info("尚无反馈记录。")
+
+# --- TAB 5: SYSTEM SETTINGS ---
 with tab_settings:
     st.header("⚙️ 配置管理")
     st.write("当前运行环境配置：")
@@ -596,6 +692,12 @@ with tab_settings:
     with st.expander("🌐 代理设置"):
         st.write(f"是否启用代理: `{os.getenv('USE_PROXY', 'True')}`")
         st.write(f"代理地址: `{os.getenv('HTTP_PROXY', '未设置')}`")
+        
+    with st.expander("📧 邮件服务器设置"):
+        st.info("请在 .env 文件中配置以下参数以启用营销功能。")
+        st.text_input("发件人邮箱", value=os.getenv("SENDER_EMAIL", "未设置"), disabled=True)
+        st.text_input("SMTP 服务器", value=os.getenv("SMTP_SERVER", "未设置"), disabled=True)
+        st.text_input("IMAP 服务器", value=os.getenv("IMAP_SERVER", "未设置"), disabled=True)
         
     st.markdown("---")
     st.caption("v1.2.0 | SuperLink 数据引擎 | Robin (SuperLink 研发团队)")

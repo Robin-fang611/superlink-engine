@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { padding: 20px; max-width: 600px; margin: auto; border: 1px solid #eee; }
+        .header { font-size: 18px; font-weight: bold; color: #007bff; }
+        .footer { font-size: 12px; color: #777; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p>Dear {{ contact_person }},</p>
+        
+        <p>I hope this email finds you well. I am writing from <strong>SuperLink Global</strong>. We recently noticed <strong>{{ company_name }}</strong>'s impressive work in the <em>{{ business_scope }}</em> sector.</p>
+        
+        <p>We specialize in helping companies like yours expand their international supply chain and logistics efficiency. We would love to explore potential partnership opportunities that could benefit your business in the coming quarter.</p>
+        
+        <p>Are you available for a brief 10-minute introductory call next Tuesday or Wednesday?</p>
+        
+        <p>Best regards,<br>
+        <strong>Marketing Team</strong><br>
+        SuperLink Global</p>
+        
+        <div class="footer">
+            <p>You received this email because your business was identified as a potential partner. If you wish to unsubscribe, please reply with "Unsubscribe".</p>
+        </div>
+    </div>
+</body>
+</html>

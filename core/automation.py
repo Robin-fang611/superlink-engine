@@ -2,9 +2,13 @@ import json
 import time
 import random
 import os
+import threading
 from datetime import datetime
 from core.searcher import Searcher
 from core.processor import Processor
+from core.database import DatabaseHandler
+from core.verifier import EmailVerifier
+from core.email_sender import EmailSender
 
 class AutomationManager:
     def __init__(self, output_file):
@@ -12,22 +16,73 @@ class AutomationManager:
         self.log_file = "progress_log.json"
         self.searcher = Searcher()
         self.processor = Processor()
+        self.db = DatabaseHandler()
+        self.email_sender = EmailSender()
         
         # 50+ Major Cities (USA & Europe)
         self.cities = [
-            # USA
             "New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", 
             "San Antonio", "San Diego", "Dallas", "San Jose", "Austin", "Jacksonville", 
-            "Fort Worth", "Columbus", "San Francisco", "Charlotte", "Indianapolis", "Seattle", 
-            "Denver", "Washington", "Boston", "El Paso", "Nashville", "Detroit", "Portland", 
-            "Las Vegas", "Memphis", "Louisville", "Baltimore", "Milwaukee", "Albuquerque", 
-            "Tucson", "Fresno", "Sacramento", "Atlanta", "Kansas City", "Miami", "Raleigh",
-            # Europe
+            "Seattle", "Denver", "Miami", "Atlanta", "Boston", "San Francisco", "Detroit",
             "London", "Berlin", "Madrid", "Rome", "Paris", "Hamburg", "Vienna", "Warsaw", 
-            "Bucharest", "Budapest", "Barcelona", "Munich", "Milan", "Prague", "Sofia", 
-            "Brussels", "Amsterdam", "Rotterdam", "Antwerp", "Felixstowe", "Le Havre", 
-            "Valencia", "Genoa", "Piraeus"
+            "Brussels", "Amsterdam", "Rotterdam", "Antwerp", "Felixstowe", "Le Havre"
         ]
+
+    def run_full_pipeline(self, base_keyword, module_choice='1', auto_send=False, stop_event=None):
+        """
+        全流程自动化：搜索 -> AI处理 -> 验证 -> 自动发送
+        """
+        os.makedirs("output", exist_ok=True)
+        print(f"\n[Ultra Pipeline] Starting for keyword: {base_keyword}")
+        
+        # 1. 搜索与初步提取 (使用现有的 run_campaign 逻辑，但进行拦截)
+        self.run_campaign(base_keyword, module_choice, stop_event)
+        
+        # 2. 验证新提取的线索
+        # 从刚刚生成的 CSV 中读取新数据
+        import pandas as pd
+        if os.path.exists(self.output_file):
+            try:
+                df = pd.read_csv(self.output_file)
+                # 剔除元数据行
+                if not df.empty and df.iloc[0]['公司名称'].startswith('任务模块'):
+                    df = df.iloc[1:]
+                
+                new_leads = df.to_dict('records')
+                print(f"[Pipeline] Validating {len(new_leads)} leads...")
+                
+                for lead in new_leads:
+                    if stop_event and stop_event.is_set(): break
+                    
+                    email = lead.get('公开邮箱')
+                    if email and email not in ["n/a", "none", ""]:
+                        # 执行三阶段验证
+                        is_valid, reason = EmailVerifier.verify(email)
+                        lead['status'] = 'valid' if is_valid else 'invalid'
+                        lead['details'] = reason
+                        
+                        # 存入数据库
+                        self.db.add_verified_lead(lead)
+                        
+                        # 3. 自动发送邮件 (如果开启)
+                        if auto_send and is_valid:
+                            print(f"  -> Sending outreach to: {email}")
+                            success, msg = self.email_sender.send_email(
+                                to_email=email,
+                                subject=f"Partnership Opportunity for {lead.get('公司名称')}",
+                                template_name="b2b_outreach.html",
+                                context={
+                                    "company_name": lead.get("公司名称"),
+                                    "contact_person": lead.get("业务负责人") or "Partner",
+                                    "business_scope": lead.get("业务范围")
+                                }
+                            )
+                            # 记录发送状态
+                            self.db.log_email_sent(None, email, "Partnership", "b2b_outreach.html", 
+                                                 'sent' if success else 'failed', msg)
+                            time.sleep(random.uniform(2, 5))
+            except Exception as e:
+                print(f"[Pipeline Error] {e}")
 
     def _load_progress(self):
         if os.path.exists(self.log_file):
