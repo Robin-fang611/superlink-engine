@@ -321,114 +321,114 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
         # Target more queries for maximum coverage
         target_queries = expanded_queries[:20] 
     
-    st.info(f"🚀 正在启动 {len(target_queries)} 个子查询的并行搜索 (深度: 5页)...")
-    raw_results = await searcher.search_batch(target_queries, pages_per_query=5)
-    
-    if not raw_results:
-        st.warning("增强模式下未找到任何结果。")
-        return False
+        st.info(f"🚀 正在启动 {len(target_queries)} 个子查询的并行搜索 (深度: 5页)...")
+        raw_results = await searcher.search_batch(target_queries, pages_per_query=5)
         
-    st.info(f"🧠 AI 正在分批处理 {len(raw_results)} 条原始数据...")
-    all_leads = processor.process_batch_enhanced(raw_results, batch_size=15)
-    
-    if not all_leads:
-        st.warning("AI 处理后未提取到有效线索。")
-        return False
-
-    # --- DEEP DIVE LOGIC ---
-    if deep_dive:
-        st.info("🎯 正在执行联系人深挖 (Deep Dive)...")
-        extractor = EmailExtractor()
-        person_searcher = PersonSearcher()
-        guesser = EmailGuesser()
-        apollo = ApolloIO()
-        snov = SnovIO()
-        
-        progress_text = "正在深挖联系人信息..."
-        dive_progress = st.progress(0, text=progress_text)
-        
-        for i, lead in enumerate(all_leads):
-            dive_progress.progress((i + 1) / len(all_leads), text=f"深挖中 ({i+1}/{len(all_leads)}): {lead.get('公司名称')}")
+        if not raw_results:
+            st.warning("增强模式下未找到任何结果。")
+            return False
             
-            # 1. 官网邮箱深挖
-            url = lead.get('来源URL')
-            domain = ""
-            if url and url.startswith("http"):
-                domain = urlparse(url).netloc.replace("www.", "")
-                found_emails = extractor.extract_from_website(url)
-                if found_emails:
-                    current_email = lead.get('公开邮箱')
-                    if not current_email or current_email in ["n/a", "none", ""]:
-                        lead['公开邮箱'] = found_emails[0]
-                    # 记录额外发现的邮箱
-                    lead['备用邮箱'] = ", ".join(found_emails[1:3])
-            
-            # 2. Snov.io 域名邮箱补全
-            if domain:
-                snov_emails = snov.get_emails_by_domain(domain)
-                if snov_emails:
-                    current_email = lead.get('公开邮箱')
-                    if not current_email or current_email in ["n/a", "none", ""]:
-                        lead['公开邮箱'] = snov_emails[0]
-                    # 将 Snov.io 发现的邮箱追加到备用邮箱
-                    existing_backups = lead.get('备用邮箱', "")
-                    new_backups = ", ".join(snov_emails[1:3])
-                    lead['备用邮箱'] = f"{existing_backups}, {new_backups}".strip(", ")
+        st.info(f"🧠 AI 正在分批处理 {len(raw_results)} 条原始数据...")
+        all_leads = processor.process_batch_enhanced(raw_results, batch_size=15)
+        
+        if not all_leads:
+            st.warning("AI 处理后未提取到有效线索。")
+            return False
 
-            # 3. Apollo.io & LinkedIn 关键决策人深挖
-            company = lead.get('公司名称')
-            if company:
-                # 优先尝试 Apollo.io
-                makers = apollo.search_decision_makers(company, target_positions)
+        # --- DEEP DIVE LOGIC ---
+        if deep_dive:
+            st.info("🎯 正在执行联系人深挖 (Deep Dive)...")
+            extractor = EmailExtractor()
+            person_searcher = PersonSearcher()
+            guesser = EmailGuesser()
+            apollo = ApolloIO()
+            snov = SnovIO()
+            
+            progress_text = "正在深挖联系人信息..."
+            dive_progress = st.progress(0, text=progress_text)
+            
+            for i, lead in enumerate(all_leads):
+                dive_progress.progress((i + 1) / len(all_leads), text=f"深挖中 ({i+1}/{len(all_leads)}): {lead.get('公司名称')}")
                 
-                # 如果 Apollo 没结果，回退到搜索引擎/LinkedIn 抓取
-                if not makers:
-                    makers = person_searcher.find_decision_makers(company, target_positions)
+                # 1. 官网邮箱深挖
+                url = lead.get('来源URL')
+                domain = ""
+                if url and url.startswith("http"):
+                    domain = urlparse(url).netloc.replace("www.", "")
+                    found_emails = extractor.extract_from_website(url)
+                    if found_emails:
+                        current_email = lead.get('公开邮箱')
+                        if not current_email or current_email in ["n/a", "none", ""]:
+                            lead['公开邮箱'] = found_emails[0]
+                        # 记录额外发现的邮箱
+                        lead['备用邮箱'] = ", ".join(found_emails[1:3])
                 
-                if makers:
-                    # 尝试为第一位决策人猜测邮箱 (如果还没邮箱)
-                    if domain and (not makers[0].get('email')):
-                        p_emails = guesser.guess_and_verify(makers[0]['name'], domain)
-                        if p_emails:
-                            makers[0]['email'] = p_emails[0]
+                # 2. Snov.io 域名邮箱补全
+                if domain:
+                    snov_emails = snov.get_emails_by_domain(domain)
+                    if snov_emails:
+                        current_email = lead.get('公开邮箱')
+                        if not current_email or current_email in ["n/a", "none", ""]:
+                            lead['公开邮箱'] = snov_emails[0]
+                        # 将 Snov.io 发现的邮箱追加到备用邮箱
+                        existing_backups = lead.get('备用邮箱', "")
+                        new_backups = ", ".join(snov_emails[1:3])
+                        lead['备用邮箱'] = f"{existing_backups}, {new_backups}".strip(", ")
+
+                # 3. Apollo.io & LinkedIn 关键决策人深挖
+                company = lead.get('公司名称')
+                if company:
+                    # 优先尝试 Apollo.io
+                    makers = apollo.search_decision_makers(company, target_positions)
                     
-                    # 格式化存入线索库
-                    maker_info = []
-                    for m in makers[:2]: # 只取前两位
-                        info = f"{m['name']} ({m.get('position', 'Decision Maker')})"
-                        if m.get('email'): info += f" - {m['email']}"
-                        maker_info.append(info)
-                    lead['关键决策人'] = " | ".join(maker_info)
-        
-        dive_progress.empty()
-    # -----------------------
+                    # 如果 Apollo 没结果，回退到搜索引擎/LinkedIn 抓取
+                    if not makers:
+                        makers = person_searcher.find_decision_makers(company, target_positions)
+                    
+                    if makers:
+                        # 尝试为第一位决策人猜测邮箱 (如果还没邮箱)
+                        if domain and (not makers[0].get('email')):
+                            p_emails = guesser.guess_and_verify(makers[0]['name'], domain)
+                            if p_emails:
+                                makers[0]['email'] = p_emails[0]
+                        
+                        # 格式化存入线索库
+                        maker_info = []
+                        for m in makers[:2]: # 只取前两位
+                            info = f"{m['name']} ({m.get('position', 'Decision Maker')})"
+                            if m.get('email'): info += f" - {m['email']}"
+                            maker_info.append(info)
+                        lead['关键决策人'] = " | ".join(maker_info)
+            
+            dive_progress.empty()
+        # -----------------------
 
-    # Save results
-    from core.deduplicator import Deduplicator
-    dedup = Deduplicator()
-    unique_leads = dedup.filter_unique(all_leads)
-    
-    if unique_leads:
-        # Save to CSV with Metadata header
-        df = pd.DataFrame(unique_leads)
+        # Save results
+        from core.deduplicator import Deduplicator
+        dedup = Deduplicator()
+        unique_leads = dedup.filter_unique(all_leads)
         
-        # Create metadata row
-        metadata = pd.DataFrame([{
-            "公司名称": f"任务模块: {module_name}",
-            "注册国家/城市": f"核心关键词: {keyword}",
-            "业务负责人": f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "公开邮箱": "---",
-            "公开电话": "---",
-            "业务范围": "---",
-            "来源URL": "---"
-        }])
-        
-        # Combine metadata with data
-        final_df = pd.concat([metadata, df], ignore_index=True)
-        final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        
-        st.success(f"✨ 增强任务完成！共捕获 {len(unique_leads)} 条唯一线索。")
-        return True
+        if unique_leads:
+            # Save to CSV with Metadata header
+            df = pd.DataFrame(unique_leads)
+            
+            # Create metadata row
+            metadata = pd.DataFrame([{
+                "公司名称": f"任务模块: {module_name}",
+                "注册国家/城市": f"核心关键词: {keyword}",
+                "业务负责人": f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                "公开邮箱": "---",
+                "公开电话": "---",
+                "业务范围": "---",
+                "来源URL": "---"
+            }])
+            
+            # Combine metadata with data
+            final_df = pd.concat([metadata, df], ignore_index=True)
+            final_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+            
+            st.success(f"✨ 增强任务完成！共捕获 {len(unique_leads)} 条唯一线索。")
+            return True
     except Exception as e:
         st.error(f"❌ 增强任务执行失败: {str(e)}")
         traceback.print_exc()
