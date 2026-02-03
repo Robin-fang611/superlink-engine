@@ -172,11 +172,22 @@ def init_environment():
     """Initialize environment variables and directories."""
     # Force reload .env from the current directory
     env_path = os.path.join(os.getcwd(), '.env')
+    
+    # Debug info for terminal
+    print(f"[Init] Checking for .env at: {env_path}")
+    
     if os.path.exists(env_path):
+        print(f"[Init] Found .env file. Content size: {os.path.getsize(env_path)} bytes")
         load_dotenv(dotenv_path=env_path, override=True)
     else:
-        st.error(f"⚠️ 未找到 .env 配置文件！路径: {env_path}")
-        load_dotenv(override=True)
+        # Try parent directory just in case
+        parent_env = os.path.join(os.path.dirname(os.getcwd()), '.env')
+        if os.path.exists(parent_env):
+            print(f"[Init] Found .env in parent: {parent_env}")
+            load_dotenv(dotenv_path=parent_env, override=True)
+        else:
+            print(f"[Init] NO .env file found in {os.getcwd()} or parent.")
+            load_dotenv(override=True)
         
     os.makedirs("output", exist_ok=True)
     os.makedirs("templates", exist_ok=True)
@@ -187,6 +198,21 @@ def init_environment():
     apollo_key = os.getenv("APOLLO_API_KEY") or safe_get_secret("APOLLO_API_KEY")
     snov_id = os.getenv("SNOVIO_USER_ID") or safe_get_secret("SNOVIO_USER_ID")
     snov_secret = os.getenv("SNOVIO_API_SECRET") or safe_get_secret("SNOVIO_API_SECRET")
+    
+    # If keys are still missing, try reading the file manually (fallback)
+    if not apollo_key and os.path.exists(env_path):
+        try:
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '=' in line and not line.startswith('#'):
+                        k, v = line.strip().split('=', 1)
+                        if k == "APOLLO_API_KEY": apollo_key = v
+                        if k == "SNOVIO_USER_ID": snov_id = v
+                        if k == "SNOVIO_API_SECRET": snov_secret = v
+                        # Update os.environ manually
+                        os.environ[k] = v
+        except Exception as e:
+            print(f"[Init] Fallback read failed: {e}")
     
     # Init DB
     db = DatabaseHandler()
@@ -201,7 +227,7 @@ def init_environment():
     }
     
     # Print diagnostic info to terminal
-    print(f"[Init] API Status: {status}")
+    print(f"[Init] Final API Status: {status}")
     return status
 
 def check_password():
@@ -839,17 +865,52 @@ with tab_settings:
         
         # Add a diagnostic button in the main tab as well
         if st.button("🔍 诊断 API 加载情况", help="查看系统是否能从 .env 识别到 Key"):
+            env_path = os.path.join(os.getcwd(), '.env')
+            st.write(f"当前工作目录: `{os.getcwd()}`")
+            st.write(f"预期 .env 路径: `{env_path}`")
+            
+            if os.path.exists(env_path):
+                st.success(f"✅ 找到 .env 文件 (大小: {os.path.getsize(env_path)} 字节)")
+                # Check line by line
+                try:
+                    with open(env_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        keys_found = [line.split('=')[0].strip() for line in lines if '=' in line and not line.startswith('#')]
+                        st.write(f"文件中识别到的 Key: `{', '.join(keys_found)}`")
+                except Exception as e:
+                    st.error(f"无法读取文件内容: {e}")
+            else:
+                st.error("❌ 未找到 .env 文件")
+                st.write("当前目录下文件列表:")
+                st.write(os.listdir(os.getcwd()))
+
             apollo_raw = os.getenv("APOLLO_API_KEY")
             snov_id_raw = os.getenv("SNOVIO_USER_ID")
+            
             if apollo_raw:
-                st.success(f"✅ 系统已识别到 Apollo Key (长度: {len(apollo_raw)})")
+                st.success(f"✅ 系统变量中已存在 Apollo Key (长度: {len(apollo_raw)})")
             else:
-                st.error("❌ 系统未能在 .env 中找到 APOLLO_API_KEY")
+                st.error("❌ 系统变量中缺失 APOLLO_API_KEY")
                 
             if snov_id_raw:
-                st.success(f"✅ 系统已识别到 Snov.io ID (长度: {len(snov_id_raw)})")
+                st.success(f"✅ 系统变量中已存在 Snov.io ID (长度: {len(snov_id_raw)})")
             else:
-                st.error("❌ 系统未能在 .env 中找到 SNOVIO_USER_ID")
+                st.error("❌ 系统变量中缺失 SNOVIO_USER_ID")
+                
+        st.markdown("---")
+        st.markdown("**🆘 手动紧急覆盖**")
+        st.caption("如果文件读取始终失败，请在此临时输入 Key（仅当前运行有效）")
+        manual_apollo = st.text_input("手动输入 Apollo Key")
+        manual_snov_id = st.text_input("手动输入 Snov.io ID")
+        manual_snov_sec = st.text_input("手动输入 Snov.io Secret")
+        
+        if st.button("💾 应用手动覆盖"):
+            if manual_apollo: os.environ["APOLLO_API_KEY"] = manual_apollo
+            if manual_snov_id: os.environ["SNOVIO_USER_ID"] = manual_snov_id
+            if manual_snov_sec: os.environ["SNOVIO_API_SECRET"] = manual_snov_sec
+            st.session_state['api_status'] = init_environment()
+            st.success("已应用手动覆盖，正在刷新状态...")
+            st.rerun()
         
     with st.expander("🌐 代理设置"):
         st.write(f"是否启用代理: `{os.getenv('USE_PROXY', 'True')}`")
