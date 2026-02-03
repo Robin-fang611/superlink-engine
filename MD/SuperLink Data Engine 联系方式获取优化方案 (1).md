@@ -212,35 +212,7 @@ class EmailGuesser:
 
 ## 五、第三方工具集成
 
-### 1. 集成 [hunter.io](hunter.io) API
-
-[hunter.io](hunter.io) 是专业的邮箱搜索工具，输入公司域名可以批量提取邮箱，集成该 API 可以快速获取高质量的邮箱地址：
-
-- **API 调用示例**：
-
-```python
-
-import requests
-
-class HunterIO:
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.base_url = "https://api.hunter.io/v2/domain-search"
-    
-    def get_domain_emails(self, domain):
-        params = {
-            "domain": domain,
-            "api_key": self.api_key
-        }
-        response = requests.get(self.base_url, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            emails = [email['value'] for email in data['data']['emails']]
-            return emails
-        return []
-```
-
-### 2. 集成 ZoomInfo API
+### 1. 集成 ZoomInfo API
 
 ZoomInfo 提供企业联系人的详细信息，包括邮箱、电话等，集成该 API 可以获取高层决策者的联系方式。
 

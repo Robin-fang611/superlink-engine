@@ -12,7 +12,11 @@ class EmailGuesser:
             "{first}@{domain}",             # john@abc.com
             "{first}{last}@{domain}",       # johnsmith@abc.com
             "{first}_{last}@{domain}",      # john_smith@abc.com
-            "{f}.{last}@{domain}"           # j.smith@abc.com
+            "{f}.{last}@{domain}",          # j.smith@abc.com
+            "{last}.{first}@{domain}",      # smith.john@abc.com
+            "{last}{f}@{domain}",           # smithj@abc.com
+            "{first}{l}@{domain}",          # johns@abc.com
+            "{first}-{last}@{domain}"       # john-smith@abc.com
         ]
 
     def guess_and_verify(self, full_name, domain):
@@ -22,30 +26,36 @@ class EmailGuesser:
         if not full_name or not domain:
             return []
             
-        # 1. 提取 First Name 和 Last Name
-        name_parts = full_name.lower().split()
-        if len(name_parts) < 2:
-            first = name_parts[0]
-            last = ""
-        else:
-            first = name_parts[0]
-            last = name_parts[-1]
-            
-        # 2. 清洗域名
-        domain = domain.replace("www.", "").lower()
+        # 1. 清洗姓名和域名
+        full_name = re.sub(r'[^a-zA-Z\s]', '', full_name).lower().strip()
+        domain = domain.replace("www.", "").lower().strip()
         
-        # 3. 生成候选名单
+        name_parts = full_name.split()
+        if not name_parts:
+            return []
+
+        first = name_parts[0]
+        last = name_parts[-1] if len(name_parts) > 1 else ""
+        f = first[0] if first else ""
+        l = last[0] if last else ""
+        
+        # 2. 生成候选名单
         candidates = []
         for fmt in self.formats:
-            email = fmt.format(
-                first=first,
-                last=last,
-                f=first[0] if first else "",
-                domain=domain
-            )
-            # 简单校验格式
-            if re.match(r'[^@]+@[^@]+\.[^@]+', email):
-                candidates.append(email)
+            try:
+                email = fmt.format(
+                    first=first,
+                    last=last,
+                    f=f,
+                    l=l,
+                    domain=domain
+                ).replace("..", ".").replace("--", "-") # 容错处理
+                
+                # 简单校验格式
+                if re.match(r'^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$', email):
+                    candidates.append(email)
+            except Exception:
+                continue
         
         # 4. 逐一验证（找到第一个有效的即停止，防止探测过于频繁）
         valid_emails = []

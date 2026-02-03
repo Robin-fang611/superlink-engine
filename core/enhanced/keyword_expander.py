@@ -28,7 +28,7 @@ class KeywordExpander:
             ]
         }
     
-    def expand(self, base_keyword, module_id, region=None):
+    def expand(self, base_keyword, module_id, region=None, personal_email_mode=False):
         """
         根据基础关键词、模块ID和地域扩展搜索词列表
         """
@@ -38,8 +38,16 @@ class KeywordExpander:
         # 1. 基础关键词 + 行业修饰符
         modifiers = self.industry_modifiers.get(module_id, [])
         for mod in modifiers:
-            expanded.add(f"{base_keyword} {mod}")
-            expanded.add(f"{mod} {base_keyword}")
+            if personal_email_mode:
+                # 个人邮箱定向搜索模式
+                expanded.add(f'"{base_keyword}" "{mod}" "Procurement Manager" "@"')
+                expanded.add(f'"{base_keyword}" "{mod}" "Purchasing Manager" "@"')
+                expanded.add(f'"{base_keyword}" "{mod}" "CEO" "@"')
+                expanded.add(f'"{base_keyword}" "{mod}" "Sourcing Director" "@"')
+                expanded.add(f'"{base_keyword}" "{mod}" "contact person" filetype:pdf')
+            else:
+                expanded.add(f"{base_keyword} {mod}")
+                expanded.add(f"{mod} {base_keyword}")
             
         # 2. 如果指定了地域，进行地域交叉裂变
         if region and region.lower() in self.geographic_modifiers:

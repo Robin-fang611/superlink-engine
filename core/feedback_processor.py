@@ -1,7 +1,10 @@
 import imaplib
 import email
 from email.header import decode_header
-from zhipuai import ZhipuAI
+try:
+    from zhipuai import ZhipuAI
+except ImportError:
+    ZhipuAI = None
 import os
 import json
 
@@ -13,7 +16,7 @@ class FeedbackProcessor:
         self.email_password = os.getenv("SENDER_PASSWORD")
         self.api_key = os.getenv("ZHIPUAI_API_KEY")
         
-        if self.api_key:
+        if self.api_key and ZhipuAI:
             self.client = ZhipuAI(api_key=self.api_key)
         else:
             self.client = None

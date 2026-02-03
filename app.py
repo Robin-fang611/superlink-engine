@@ -6,6 +6,10 @@ import pandas as pd
 import glob
 import json
 import threading
+import asyncio
+import sqlite3
+import traceback
+from urllib.parse import urlparse, urljoin
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -23,6 +27,7 @@ from core.enhanced.enhanced_processor import EnhancedProcessor
 from core.enhanced.email_extractor import EmailExtractor
 from core.enhanced.person_searcher import PersonSearcher
 from core.enhanced.email_guesser import EmailGuesser
+from core.enhanced.third_party import ApolloIO, SnovIO
 
 # ==============================================================================
 # 0. GLOBAL SESSION MANAGEMENT
@@ -172,6 +177,9 @@ def init_environment():
     # Check for .env file or Streamlit Secrets
     serper_key = os.getenv("SERPER_API_KEY") or safe_get_secret("SERPER_API_KEY")
     zhipu_key = os.getenv("ZHIPUAI_API_KEY") or safe_get_secret("ZHIPUAI_API_KEY")
+    apollo_key = os.getenv("APOLLO_API_KEY")
+    snov_id = os.getenv("SNOVIO_USER_ID")
+    snov_secret = os.getenv("SNOVIO_API_SECRET")
     
     # Init DB
     db = DatabaseHandler()
@@ -179,6 +187,8 @@ def init_environment():
     status = {
         "serper": bool(serper_key),
         "zhipu": bool(zhipu_key),
+        "apollo": bool(apollo_key),
+        "snov": bool(snov_id and snov_secret),
         "output_dir": os.path.exists("output"),
         "db_ok": True
     }
@@ -297,18 +307,19 @@ def list_history_files():
 # 3. DASHBOARD COMPONENTS
 # ==============================================================================
 
-async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_dive=False, target_positions=None):
+async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_dive=False, target_positions=None, personal_email_mode=False):
     """Execute task using the new Enhanced engine (Async + AI Batching + Deep Dive)."""
-    expander = KeywordExpander()
-    searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
-    processor = EnhancedProcessor()
-    
-    st.info("🔍 正在智能扩展关键词以实现最大覆盖...")
-    module_id = str(module_idx + 1)
-    # Expand for major regions
-    expanded_queries = expander.expand(keyword, module_id)
-    # Target more queries for maximum coverage
-    target_queries = expanded_queries[:20] 
+    try:
+        expander = KeywordExpander()
+        searcher = AsyncSearcher(concurrency=3) # Safe for cheap proxy
+        processor = EnhancedProcessor()
+        
+        st.info("🔍 正在智能扩展关键词以实现最大覆盖...")
+        module_id = str(module_idx + 1)
+        # Expand for major regions
+        expanded_queries = expander.expand(keyword, module_id, personal_email_mode=personal_email_mode)
+        # Target more queries for maximum coverage
+        target_queries = expanded_queries[:20] 
     
     st.info(f"🚀 正在启动 {len(target_queries)} 个子查询的并行搜索 (深度: 5页)...")
     raw_results = await searcher.search_batch(target_queries, pages_per_query=5)
@@ -330,6 +341,8 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
         extractor = EmailExtractor()
         person_searcher = PersonSearcher()
         guesser = EmailGuesser()
+        apollo = ApolloIO()
+        snov = SnovIO()
         
         progress_text = "正在深挖联系人信息..."
         dive_progress = st.progress(0, text=progress_text)
@@ -339,7 +352,9 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
             
             # 1. 官网邮箱深挖
             url = lead.get('来源URL')
+            domain = ""
             if url and url.startswith("http"):
+                domain = urlparse(url).netloc.replace("www.", "")
                 found_emails = extractor.extract_from_website(url)
                 if found_emails:
                     current_email = lead.get('公开邮箱')
@@ -348,14 +363,31 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
                     # 记录额外发现的邮箱
                     lead['备用邮箱'] = ", ".join(found_emails[1:3])
             
-            # 2. LinkedIn 关键决策人深挖
+            # 2. Snov.io 域名邮箱补全
+            if domain:
+                snov_emails = snov.get_emails_by_domain(domain)
+                if snov_emails:
+                    current_email = lead.get('公开邮箱')
+                    if not current_email or current_email in ["n/a", "none", ""]:
+                        lead['公开邮箱'] = snov_emails[0]
+                    # 将 Snov.io 发现的邮箱追加到备用邮箱
+                    existing_backups = lead.get('备用邮箱', "")
+                    new_backups = ", ".join(snov_emails[1:3])
+                    lead['备用邮箱'] = f"{existing_backups}, {new_backups}".strip(", ")
+
+            # 3. Apollo.io & LinkedIn 关键决策人深挖
             company = lead.get('公司名称')
             if company:
-                makers = person_searcher.find_decision_makers(company, target_positions)
+                # 优先尝试 Apollo.io
+                makers = apollo.search_decision_makers(company, target_positions)
+                
+                # 如果 Apollo 没结果，回退到搜索引擎/LinkedIn 抓取
+                if not makers:
+                    makers = person_searcher.find_decision_makers(company, target_positions)
+                
                 if makers:
-                    # 尝试为第一位决策人猜测邮箱
-                    domain = urlparse(url).netloc if url else ""
-                    if domain:
+                    # 尝试为第一位决策人猜测邮箱 (如果还没邮箱)
+                    if domain and (not makers[0].get('email')):
                         p_emails = guesser.guess_and_verify(makers[0]['name'], domain)
                         if p_emails:
                             makers[0]['email'] = p_emails[0]
@@ -363,7 +395,7 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
                     # 格式化存入线索库
                     maker_info = []
                     for m in makers[:2]: # 只取前两位
-                        info = f"{m['name']} ({m['position']})"
+                        info = f"{m['name']} ({m.get('position', 'Decision Maker')})"
                         if m.get('email'): info += f" - {m['email']}"
                         maker_info.append(info)
                     lead['关键决策人'] = " | ".join(maker_info)
@@ -397,7 +429,10 @@ async def run_enhanced_task(module_idx, keyword, module_name, output_file, deep_
         
         st.success(f"✨ 增强任务完成！共捕获 {len(unique_leads)} 条唯一线索。")
         return True
-    return False
+    except Exception as e:
+        st.error(f"❌ 增强任务执行失败: {str(e)}")
+        traceback.print_exc()
+        return False
 
 def show_api_status_dashboard():
     with st.sidebar:
@@ -411,6 +446,14 @@ def show_api_status_dashboard():
         with col2:
             st.markdown(f"**智谱 AI**")
             st.markdown("🟢 正常" if status.get("zhipu") else "🔴 缺失")
+            
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown(f"**Apollo.io**")
+            st.markdown("🟢 正常" if status.get("apollo") else "⚪ 禁用")
+        with col4:
+            st.markdown(f"**Snov.io**")
+            st.markdown("🟢 正常" if status.get("snov") else "⚪ 禁用")
             
         st.markdown("---")
         st.markdown("### 🛠️ 运行信息")
@@ -469,7 +512,9 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
         st.success("✨ 任务成功完成！")
         return True
     except Exception as e:
-        st.error(f"❌ 运行出错: {str(e)}")
+        st.error(f"❌ 增强任务运行失败: {str(e)}")
+        # Print full traceback to terminal for debugging
+        traceback.print_exc()
         return False
 
 def run_batch_mode(module_choice, base_keyword, output_file, progress_bar):
@@ -558,6 +603,7 @@ with tab_run:
         st.markdown("---")
         st.markdown("**🚀 性能增强模式**")
         use_enhanced = st.checkbox("开启增强搜索", value=False, help="使用异步搜索和智能关键词裂变，可挖掘出 5-10 倍以上的线索量。")
+        personal_mode = st.checkbox("个人邮箱获取增强", value=False, help="针对关键决策人（采购、CEO）定向搜索并猜测其个人邮箱。")
         
         st.markdown("**🎯 联系人深挖 (Deep Dive)**")
         deep_contacts = st.checkbox("深度挖掘关键人", value=False, help="开启后，系统将自动挖掘 LinkedIn 关键人并尝试获取其个人邮箱。")
@@ -617,14 +663,14 @@ with tab_run:
                         
                         success = False
                         if use_enhanced:
-                            import asyncio
                             success = asyncio.run(run_enhanced_task(
                                 choice_idx, 
                                 keyword, 
                                 selected_option, 
                                 output_file, 
                                 deep_dive=deep_contacts, 
-                                target_positions=target_positions
+                                target_positions=target_positions,
+                                personal_email_mode=personal_mode
                             ))
                         elif choice_idx < 4:
                             success = run_single_search(choice_idx, keyword, selected_option, output_file)
@@ -686,7 +732,6 @@ with tab_marketing:
     rate_limit = st.slider("发送间隔 (秒)", 1, 10, 3)
     
     if st.button("🚀 开始批量群发", type="primary"):
-        import sqlite3
         with db.get_connection() as conn:
             conn.row_factory = sqlite3.Row
             try:
