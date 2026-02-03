@@ -170,16 +170,23 @@ from core.feedback_processor import FeedbackProcessor
 
 def init_environment():
     """Initialize environment variables and directories."""
-    load_dotenv()
+    # Force reload .env from the current directory
+    env_path = os.path.join(os.getcwd(), '.env')
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        st.error(f"⚠️ 未找到 .env 配置文件！路径: {env_path}")
+        load_dotenv(override=True)
+        
     os.makedirs("output", exist_ok=True)
     os.makedirs("templates", exist_ok=True)
     
     # Check for .env file or Streamlit Secrets
     serper_key = os.getenv("SERPER_API_KEY") or safe_get_secret("SERPER_API_KEY")
     zhipu_key = os.getenv("ZHIPUAI_API_KEY") or safe_get_secret("ZHIPUAI_API_KEY")
-    apollo_key = os.getenv("APOLLO_API_KEY")
-    snov_id = os.getenv("SNOVIO_USER_ID")
-    snov_secret = os.getenv("SNOVIO_API_SECRET")
+    apollo_key = os.getenv("APOLLO_API_KEY") or safe_get_secret("APOLLO_API_KEY")
+    snov_id = os.getenv("SNOVIO_USER_ID") or safe_get_secret("SNOVIO_USER_ID")
+    snov_secret = os.getenv("SNOVIO_API_SECRET") or safe_get_secret("SNOVIO_API_SECRET")
     
     # Init DB
     db = DatabaseHandler()
@@ -192,6 +199,9 @@ def init_environment():
         "output_dir": os.path.exists("output"),
         "db_ok": True
     }
+    
+    # Print diagnostic info to terminal
+    print(f"[Init] API Status: {status}")
     return status
 
 def check_password():
@@ -249,6 +259,9 @@ manager.update_session(session_id)
 if 'init_done' not in st.session_state:
     st.session_state['api_status'] = init_environment()
     st.session_state['init_done'] = True
+
+# TEST SIDEBAR
+st.sidebar.title("SuperLink Sidebar")
 
 # Authentication
 if not check_password():
@@ -460,6 +473,21 @@ def show_api_status_dashboard():
         st.caption(f"当前目录: `{os.getcwd()}`")
         st.caption(f"服务器端口: `3000` (映射中)")
 
+        if st.button("🔄 刷新系统配置", help="重新加载 .env 文件并更新 API 状态"):
+            st.session_state['api_status'] = init_environment()
+            st.rerun()
+
+        # Debugging info (masked)
+        with st.expander("🔍 调试信息 (仅本地可见)"):
+            def mask(s):
+                if not s: return "None"
+                s = str(s)
+                return s[:4] + "*" * (len(s)-4) if len(s) > 4 else "***"
+            
+            st.write(f"Apollo Key: `{mask(os.getenv('APOLLO_API_KEY'))}`")
+            st.write(f"Snov ID: `{mask(os.getenv('SNOVIO_USER_ID'))}`")
+            st.write(f"Snov Secret: `{mask(os.getenv('SNOVIO_API_SECRET'))}`")
+
 # ==============================================================================
 # 4. CORE LOGIC ADAPTERS
 # ==============================================================================
@@ -512,7 +540,7 @@ def run_single_search(choice_idx, keyword, module_name, output_file):
         st.success("✨ 任务成功完成！")
         return True
     except Exception as e:
-        st.error(f"❌ 增强任务运行失败: {str(e)}")
+        st.error(f"❌ 任务运行失败: {str(e)}")
         # Print full traceback to terminal for debugging
         traceback.print_exc()
         return False
@@ -802,6 +830,26 @@ with tab_settings:
         st.info("这些密钥是从您的 .env 文件或云端配置中加载的。")
         st.text_input("Serper 搜索密钥", value=os.getenv("SERPER_API_KEY", "未设置"), type="password", disabled=True)
         st.text_input("智谱 AI 密钥", value=os.getenv("ZHIPUAI_API_KEY", "未设置"), type="password", disabled=True)
+        
+        st.markdown("---")
+        st.markdown("**增强工具密钥 (Apollo & Snov.io)**")
+        st.text_input("Apollo.io 密钥", value=os.getenv("APOLLO_API_KEY", "未设置"), type="password", disabled=True)
+        st.text_input("Snov.io User ID", value=os.getenv("SNOVIO_USER_ID", "未设置"), type="password", disabled=True)
+        st.text_input("Snov.io API Secret", value=os.getenv("SNOVIO_API_SECRET", "未设置"), type="password", disabled=True)
+        
+        # Add a diagnostic button in the main tab as well
+        if st.button("🔍 诊断 API 加载情况", help="查看系统是否能从 .env 识别到 Key"):
+            apollo_raw = os.getenv("APOLLO_API_KEY")
+            snov_id_raw = os.getenv("SNOVIO_USER_ID")
+            if apollo_raw:
+                st.success(f"✅ 系统已识别到 Apollo Key (长度: {len(apollo_raw)})")
+            else:
+                st.error("❌ 系统未能在 .env 中找到 APOLLO_API_KEY")
+                
+            if snov_id_raw:
+                st.success(f"✅ 系统已识别到 Snov.io ID (长度: {len(snov_id_raw)})")
+            else:
+                st.error("❌ 系统未能在 .env 中找到 SNOVIO_USER_ID")
         
     with st.expander("🌐 代理设置"):
         st.write(f"是否启用代理: `{os.getenv('USE_PROXY', 'True')}`")
