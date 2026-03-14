@@ -1,16 +1,4 @@
-# Environments
-.venv/
-env/
-venv/
-ENV/
-
-# Secrets
-.env
-progress_log.json
-output/history_log.json
-.streamlit/secrets.toml
-
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -32,16 +20,36 @@ wheels/
 .installed.cfg
 *.egg
 
-# Data Output
-output/*.csv
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
 
-# IDEs
+# IDE
 .vscode/
 .idea/
-.trae/
 *.swp
 *.swo
+*~
+
+# Environment variables
+.env
+
+# Output files
+output/*.csv
+output/*.db
+output/*.log
+output/diagnostics_*.txt
+output/test_report_*.txt
+
+# Progress logs
+progress_log.json
 
 # OS
+.DS_Store
 Thumbs.db
-Desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
